@@ -19,5 +19,7 @@ The input for this method matches the output of genTreeChildNet.py.
 
 
 solverPPS.py 		implements the exact solver
+
 approxPPS.py 		implements the approximation algorithm ApproxPPS
+
 bpps_model_LP.mos 	implements the LP relaxation for the binary network formulation of the PPS
