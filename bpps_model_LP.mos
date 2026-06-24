@@ -1,0 +1,169 @@
+model bpps_model_LP uses "mmxprs"
+
+parameters
+  InputFile1="Networks/182422_n50_r30_d1_p1_mosel_labels.txt"
+  InputFile2="Networks/182422_n50_r30_d1_p1_mosel_network.txt"
+  FixFile=""
+end-parameters
+
+declarations
+  n: integer
+  p: integer
+  m: integer
+  n_int: integer
+  nfix: integer
+end-declarations
+initialisations from InputFile1
+  n
+  p
+end-initialisations
+initialisations from InputFile2
+  m
+  n_int
+end-initialisations
+if FixFile <> "" then
+  initialisations from FixFile
+    nfix
+  end-initialisations
+else
+  nfix := 1
+end-if
+declarations
+  L = 1..n
+  leaves: array(L) of integer
+  C: array(L) of integer
+  M = 1..m
+  N_int = 1..n_int
+  N = 1..n+n_int
+  E1: array(M) of integer
+  E2: array(M) of integer
+  Sp = 0..p
+  rho = n+1
+  cext: array(L) of mpvar
+  c: array(N_int,Sp) of mpvar
+  a: array(N_int,Sp) of mpvar
+  FixIdx = 1..nfix
+  fix_v: array(FixIdx) of integer
+  fix_s: array(FixIdx) of integer
+  fix_val: array(FixIdx) of integer
+end-declarations
+initialisations from InputFile1
+  leaves
+  C
+end-initialisations
+initialisations from InputFile2
+  E1
+  E2
+end-initialisations
+if FixFile <> "" then
+  initialisations from FixFile
+    nfix
+    fix_v
+    fix_s
+    fix_val
+  end-initialisations
+end-if
+
+!forall(v in N_int, s in Sp) c(v,s) is_binary
+!forall(v in L) cext(v) is_binary
+!forall(v in N_int, s in Sp) a(v,s) is_binary
+forall(v in N_int, s in Sp) do
+  c(v,s) >= 0; c(v,s) <= 1
+  a(v,s) >= 0; a(v,s) <= 1
+end-do
+forall(v in L) do
+  cext(v) >= 0; cext(v) <= 1
+end-do
+if FixFile <> "" then
+  forall(i in FixIdx) do
+    a(fix_v(i),fix_s(i)) = fix_val(i)
+  end-do
+end-if
+
+! Internal node costs
+forall(v in N_int, s in Sp | v+n <> rho) do
+    c(v,s) >= a(v,s) - sum(k in M | E2(k)=v+n) a(E1(k)-n,s)
+end-do
+
+! Leaf costs
+forall(k in M | E2(k) in L) do
+    cext(E2(k)) >= 1 - a(E1(k)-n, C(E2(k)))
+end-do
+
+! Internal node consistency
+forall(v in N_int | v+n <> rho) do
+    sum(s in Sp) (a(v,s) - sum(k in M | E2(k)=v+n) a(E1(k)-n,s)) <= 0
+end-do
+
+! Leaf consistency
+forall(k in M | E2(k) in L) do
+    sum(s in Sp) a(E1(k)-n,s) >= 1
+end-do
+
+! Root assignment
+sum(s in Sp) a(rho-n,s) <= 1
+
+! Objective function
+obj := sum(v in N_int, s in Sp | v+n <> rho) c(v,s) + sum(v in L) cext(v)
+
+minimize(obj)
+
+! Internal node LP solution
+!fopen("a_solution.csv", F_OUTPUT)
+!writeln("v,s,value")
+!forall(v in N_int, s in Sp) do
+!    writeln(v+n, ",", s, ",", getsol(a(v,s)))  ! use writeln, not write
+!end-do
+!fclose(F_OUTPUT)
+
+!fopen("c_solution.csv", F_OUTPUT)
+!writeln("v,s,c")
+!forall(v in N_int, s in Sp) do
+!    writeln(v+n, ",", s, ",", getsol(c(v,s)))
+!end-do
+!fclose(F_OUTPUT)
+
+!fopen("leaf_solution.csv", F_OUTPUT)
+!writeln("type,leaf,state,value")
+!forall(v in L) do
+!    writeln("leaf,", v, ",", C(v), ",", getsol(cext(v)))  ! newline per leaf
+!end-do
+!fclose(F_OUTPUT)
+
+!fopen("network.csv", F_OUTPUT)
+!writeln("E1,E2")
+!forall(k in M) do
+!    writeln(E1(k), ",", E2(k))  
+!end-do
+!fclose(F_OUTPUT)
+
+!writeln("Status: ", getprobstat)
+writeln("+++ LP_OPT = ", getobjval)
+forall(v in N_int) do
+  forall(s in Sp) do
+    write(getsol(a(v,s))," ")
+  end-do
+  writeln("")
+end-do
+! forall(v in L) do
+!   if getsol(cext(v)) > 0 then
+!     writeln("cut edge above L",v," costs ",getsol(cext(v)))
+!   end-if
+! end-do
+! forall(v in N_int) do
+!   cost := sum(s in Sp) getsol(c(v,s))
+!   if cost > 0 then
+!     writeln("cut edge(s) above V",v," costs ",cost)
+!   end-if
+! end-do
+! forall(v in N_int) do
+!   write("lambda(",v,") = ")
+!   forall(s in Sp) do
+!     if getsol(a(v,s)) > 0 then
+!       write(s," (",getsol(a(v,s)),"), ")
+!     end-if
+!   end-do
+!   writeln("")
+! end-do
+
+end-model
